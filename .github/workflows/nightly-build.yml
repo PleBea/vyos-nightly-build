@@ -1,44 +1,45 @@
 name: VyOS nightly build
 
 on:
-  schedule:
-    - cron: "0 0 * * *"
+  push:
+    branches:
+      - current
 
   workflow_dispatch:
     inputs:
       BUILD_BY:
-        description: 'Builder identifier (default: autobuild@vyos.net)'
-        default: ''
+        description: "Builder identifier (default: autobuild@vyos.net)"
+        default: ""
       build_version:
-        description: 'Version number (default: 1.5-rolling-ISO8601-TIMESTAMP)'
-        default: ''
+        description: "Version number (default: 1.5-rolling-ISO8601-TIMESTAMP)"
+        default: ""
       SKIP_SMOKETEST_RAID1:
-        description: 'Skip RAID1 Test'
+        description: "Skip RAID1 Test"
         required: true
         type: boolean
         default: false
       SKIP_SMOKETEST_CLI:
-        description: 'Skip all CLI based smoketest'
+        description: "Skip all CLI based smoketest"
         required: true
         type: boolean
         default: false
       SKIP_SMOKETEST_CONFIG:
-        description: 'Skip config load test'
+        description: "Skip config load test"
         required: true
         type: boolean
         default: false
       SKIP_SMOKETEST_TPM:
-        description: 'Skip TPM test'
+        description: "Skip TPM test"
         required: true
         type: boolean
         default: false
       SKIP_RELEASE_PUBLISHING:
-        description: 'Skip release publishing'
+        description: "Skip release publishing"
         required: true
         type: boolean
         default: false
       SKIP_SLACK_NOTIFICATIONS:
-        description: 'Skip Slack notifications'
+        description: "Skip Slack notifications"
         required: true
         type: boolean
         default: false
@@ -323,60 +324,6 @@ jobs:
               cat $logfile | grep 'Error:' -A12 >> ${{ github.workspace }}/smoketest_filtered.log || true
           done
 
-      - name: "Slack notification: send to channel"
-        id: send_a_slack_failure_notification
-        uses: slackapi/slack-github-action@v1.25.0
-        with:
-          payload: |
-            {
-              "text": "*VyOS nightly build automation did not succeed*",
-              "attachments": [
-                {
-                  "color": "FF6600",
-                  "fields": [
-                    {
-                      "title": "Repository",
-                      "short": true,
-                      "value": "${{ github.repository }}"
-                    },
-                    {
-                      "title": "Workflow",
-                      "short": true,
-                      "value": "${{ github.workflow }}"
-                    },
-                    {
-                      "title": "Trigger",
-                      "short": true,
-                      "value": "${{ github.event_name }}"
-                    },
-                    {
-                      "title": "Run number",
-                      "short": true,
-                      "value": "${{ github.run_number }}"
-                    },
-                    {
-                      "title": "URL",
-                      "short": false,
-                      "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-
-      - name: "Slack notification: send Smoketest log excerpt"
-        uses: MeilCli/slack-upload-file@v4
-        with:
-          slack_token: ${{ secrets.SLACK_BOT_TOKEN }}
-          channel_id: ${{ secrets.SLACK_CHANNEL_ID }}
-          file_type: 'text'
-          file_path: ${{ github.workspace }}/smoketest_filtered.log
-          initial_comment: Smoketest log excerpt
-          if_no_files_found: ignore
-
   publish:
     needs:
       - test_config_load
@@ -401,9 +348,9 @@ jobs:
         with:
           repository: vyos/vyos-1x
           path: vyos-1x
-      -  id: commit_ids
-         shell: bash
-         run: |
+      - id: commit_ids
+        shell: bash
+        run: |
           cd vyos-build
           echo "CHANGELOG_COMMIT_VYOS_BUILD=$(git log --since "${{ needs.build_generic_iso.outputs.PREVIOUS_SUCCESS_BUILD_TIMESTAMP }}" --format="%H" --reverse | head -n1)" >> $GITHUB_OUTPUT
           cd ../vyos-1x
@@ -490,21 +437,3 @@ jobs:
           files: |
             ${{ needs.build_generic_iso.outputs.generic_image_iso }}
             ${{ needs.build_generic_iso.outputs.generic_image_iso }}.minisig
-
-      - uses: Nats-ji/delete-old-releases@v1.0.1
-        with:
-          token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
-          keep-count: 30
-          keep-old-minor-releases: false
-
-  update_download_page:
-    needs:
-      - publish
-    uses: vyos/community.vyos.net/.github/workflows/main.yml@production
-    with:
-      branch: production
-      aws_amplify_region: ${{ vars.AWS_AMPLIFY_REGION }}
-      aws_amplify_app_id: ${{ vars.AWS_AMPLIFY_APP_ID }}
-    secrets:
-      AWS_AMPLIFY_ACCESS_KEY_ID: ${{ secrets.AWS_AMPLIFY_ACCESS_KEY_ID }}
-      AWS_AMPLIFY_SECRET_ACCESS_KEY: ${{ secrets.AWS_AMPLIFY_SECRET_ACCESS_KEY }}
